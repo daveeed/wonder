@@ -475,8 +475,8 @@ public class MInstance extends MObject {
     @Override
     public String toString() {
         if (false) {
-            return (values.toString() + " " + "lastRegistration = " + _lastRegistration + " " + "state = " + state
-                    + " " + "isRefusingNewSessions = " + isRefusingNewSessions() + " " + "deaths = " + _deaths);
+            return (values.toString() + " " + "lastRegistration = " + (_lastRegistration == NSTimestamp.DistantPast ? "(none)" : _lastRegistration.toString()) + 
+                    " " + "state = " + state + " " + "isRefusingNewSessions = " + isRefusingNewSessions() + " " + "deaths = " + _deaths);
         }
         return "MInstance@" + applicationName() + "-" + id();
     }
@@ -759,19 +759,26 @@ public class MInstance extends MObject {
     	NSTimestamp currentTime = new NSTimestamp();
         String currentDate = currentTime.toString();
 
-        long cutOffTime = _lastRegistration.getTime() + lifebeatCheckInterval();
         String assumedToBeDead = "";
-        if (currentTime.getTime() > cutOffTime) {
-        	long secondsDifference = (currentTime.getTime() - cutOffTime) / 1000;
-        	assumedToBeDead = "The app did not respond for " + secondsDifference + "seconds " +
-        			"which is greater than the allowed threshold of " + lifebeatCheckInterval() + " seconds " +
-        			"(Lifebeat Interval * WOAssumeApplicationIsDeadMultiplier) so it is assumed to be dead.\n";
+        if (_lastRegistration == NSTimestamp.DistantPast) {
+            assumedToBeDead = "The app did not send any lifebeats so it is assumed to be dead.\n";
         }
+        else {
+            long cutOffTime = _lastRegistration.getTime() + lifebeatCheckInterval();
+            if (currentTime.getTime() > cutOffTime) {
+                long secondsDifference = (currentTime.getTime() - _lastRegistration.getTime()) / 1000;
+                assumedToBeDead = "The app did not respond for " + secondsDifference + " seconds " +
+                        "which is greater than the allowed threshold of " + lifebeatCheckInterval()/1000 + " seconds " +
+                        "(Lifebeat Interval * WOAssumeApplicationIsDeadMultiplier) so it is assumed to be dead.\n";
+            }   
+        }
+
     	String message = "Application '" + displayName() + "' on " + _host.name() + ":" + port() +
 	        " stopped running at " + (currentDate) + ".\n" + 
 	        "The app's current state was: " + stateArray[state] + ".\n" +
 	        assumedToBeDead + 
-	        "The last successful communication occurred at: " + _lastRegistration.toString() + ". " + 
+	        "The last successful communication occurred at: " + 
+	        (_lastRegistration == NSTimestamp.DistantPast ? "(none)" : _lastRegistration.toString()) + ". " + 
 	        "This may be the result of a crash or an intentional shutdown from outside of wotaskd";
         
     	NSLog.err.appendln(message);
