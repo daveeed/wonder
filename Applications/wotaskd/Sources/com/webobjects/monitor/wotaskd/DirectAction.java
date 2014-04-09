@@ -15,6 +15,8 @@ SUCH DAMAGE.
 
 import java.util.Enumeration;
 
+import org.apache.log4j.Logger;
+
 import com.webobjects.appserver.WOActionResults;
 import com.webobjects.appserver.WOApplication;
 import com.webobjects.appserver.WODirectAction;
@@ -60,7 +62,9 @@ public class DirectAction extends WODirectAction  {
     static private String _emptyXML;
     static private NSDictionary _argumentNumberCommandError;
     static private NSTimestampFormatter aFormat = null;
-
+    private static final Logger logger = Logger.getLogger(DirectAction.class);
+    
+    
     static {
         // get the hostname for the error messages
         _hostName = WOApplication.application().host();
@@ -531,11 +535,15 @@ public class DirectAction extends WODirectAction  {
 
                     instanceResponse = new NSMutableArray(instanceArrayCount);
 
+                    logger.trace("Checking on instances # " + instanceArrayCount);
                     NSMutableArray runningInstanceArray = new NSMutableArray();
                     for (Enumeration e = instanceArray.objectEnumerator(); e.hasMoreElements(); ) {
                         MInstance anInst = (MInstance) e.nextElement();
                         if (anInst.isRunning_W()) {
+                            logger.debug(anInst.displayName() + " is calculated to be running (receiving lifebeats)");
                             runningInstanceArray.addObject(anInst);
+                        } else { 
+                            logger.debug(anInst.displayName() + " is calculated to be NOT running (not receiving lifebeats)");
                         }
                     }
                     getStatisticsForInstanceArray(runningInstanceArray, errorResponse);
@@ -545,6 +553,7 @@ public class DirectAction extends WODirectAction  {
 
                         String error = anInstance.statisticsError();
                         if (error != null) {
+                            logger.debug(anInstance.displayName() + " had stats error: " + error);
                             errorResponse.addObject(error);
                             //reset the error
                         	anInstance.resetStatisticsError();
@@ -570,14 +579,17 @@ public class DirectAction extends WODirectAction  {
 
                 queryWotaskdResponse.takeValueForKey(instanceResponse, "instanceResponse");
             } else {
+                logger.debug("Unrecognized Query: " + queryWotaskdString);
                 errorResponse.addObject(_hostName + ": Unrecognized Query: " + queryWotaskdString);
             }
+            logger.debug("queryWotaskdResponse: " + queryWotaskdResponse);
             monitorResponse.takeValueForKey(queryWotaskdResponse, "queryWotaskdResponse");
         }
 
         // getting the errors
         NSArray globalArray = theApplication.siteConfig().globalErrorDictionary.allValues();
         if ( (globalArray != null) && (globalArray.count() > 0) ) {
+            logger.debug("globalArray errors: " + globalArray);
             errorResponse.addObjectsFromArray(globalArray);
             theApplication.siteConfig().globalErrorDictionary = new _NSThreadsafeMutableDictionary(new NSMutableDictionary());
         }
@@ -609,18 +621,23 @@ public class DirectAction extends WODirectAction  {
             Runnable work = new Runnable() {
                 public void run() {
                     try {
+                        logger.debug("Getting instance data for: " + ((MInstance) instanceArray.objectAtIndex(j)).displayName());
                         responses[j] = localMonitor.queryInstance((MInstance) instanceArray.objectAtIndex(j));
+                        logger.debug("Got instance data for: " + ((MInstance) instanceArray.objectAtIndex(i)).displayName());
                     } catch (MonitorException me) {
+                        logger.debug("Exception getting instance data for: " + ((MInstance) instanceArray.objectAtIndex(j)).displayName(), me);
                         MInstance badInstance = ((MInstance) instanceArray.objectAtIndex(j));
                         if ( (!badInstance.isRunning_W()) &&
                              (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelCritical, NSLog.DebugGroupDeployment)) ) {
-                            NSLog.debug.appendln("Exception getting Statistics for instance: " + ((MInstance) instanceArray.objectAtIndex(j)).displayName());
+                            NSLog.debug.appendln("Exception getting Statistics for instance: " + badInstance.displayName());
                         }
                         //if we get an exception and the instance state is running, that could mean the app may have been too 
                         //busy to respond of may have locked up in either case, we need to notify 
                     	//java monitor which instance its having problems with
-                        if (badInstance.isRunning_W())
-                        	badInstance.setStatisticsError(me.getMessage());
+                        if (badInstance.isRunning_W()) {
+                            badInstance.setStatisticsError(me.getMessage());
+                            NSLog.debug.appendln("Instance is still running: " + badInstance.displayName());
+                        }
                         responses[j] =  null;
                     }
                 }
@@ -632,8 +649,11 @@ public class DirectAction extends WODirectAction  {
         try {
             for (int i=0; i<theCount; i++) {
                 workers[i].join();
+
             }
-        } catch (InterruptedException ie) {}
+        } catch (InterruptedException ie) {
+            logger.debug("Interrupted while joining ", ie);
+        }
 
         for (int i=0; i<theCount; i++) {
             WOResponse aResponse = responses[i];
@@ -650,6 +670,8 @@ public class DirectAction extends WODirectAction  {
                 NSData responseContent = aResponse.content();
                 try {
                     instanceResponse = (NSDictionary) new _JavaMonitorDecoder().decodeRootObject(responseContent);
+                    NSLog.debug.appendln(((MInstance) instanceArray.objectAtIndex(i)).displayName() + " instance response: " + instanceResponse);
+
                 } catch (WOXMLException wxe) {
                     try {
                         Object o = NSPropertyListSerialization.propertyListFromString(new String(responseContent.bytes()));
@@ -694,7 +716,7 @@ public class DirectAction extends WODirectAction  {
                     NSLog.err.appendln("Wotaskd getStatisticsForInstanceArray: Error parsing PList: " + queryInstanceResponse + " from " + anInstance.displayName());
                 }
             }
-            else if (anInstance.isRunning_M()) {
+            else if (anInstance.isRunning_M() && anInstance.statisticsError() == null) {
             	//display a hint that this instance is running but did not respond to a query statistics request
             	anInstance.setStatisticsError("No statistics for " + anInstance.displayName());
             }
