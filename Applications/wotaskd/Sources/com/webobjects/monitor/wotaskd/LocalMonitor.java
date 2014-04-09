@@ -19,6 +19,8 @@ import java.net.Socket;
 import java.util.Enumeration;
 import java.util.TimeZone;
 
+import org.apache.log4j.Logger;
+
 import com.webobjects.appserver.WOApplication;
 import com.webobjects.appserver.WOHTTPConnection;
 import com.webobjects.appserver.WORequest;
@@ -58,7 +60,9 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     Application theApplication = (Application )WOApplication.application();
     final int _forceQuitDelay = ERXProperties.intForKeyWithDefault("WOTaskd.killTimeout", 120000);
     final int _receiveTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.receiveTimeout", 5000);
+    final int _sendTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.sendTimeout", 5000);
     final boolean _forceQuitTaskEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.forceQuitTaskEnabled", false);
+    private static final Logger logger = Logger.getLogger(LocalMonitor.class);
 
 
     public LocalMonitor() {
@@ -439,7 +443,8 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         try {
             if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelCritical, NSLog.DebugGroupDeployment))
                 NSLog.debug.appendln("Starting Instance: " + aLaunchPath);
-            Runtime.getRuntime().exec(aLaunchPath);
+            Process p = Runtime.getRuntime().exec(aLaunchPath);
+            new ProcessStreamLogger(anInstance, logger, p).start();
         } catch (IOException ioe) {
             NSLog.err.appendln("Failed to start " + anInstance.displayName() + ": " + ioe);
             return _hostName + ": Failed to start " + anInstance.displayName() + ": " + ioe;
@@ -528,17 +533,21 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         try {
             WOHTTPConnection anHTTPConnection = new WOHTTPConnection(anInstance.host().name(), anInstance.port().intValue());
             anHTTPConnection.setReceiveTimeout(_receiveTimeout);
-
+            anHTTPConnection.setSendTimeout(_sendTimeout);
+            logger.debug("Sending request to instance");
             boolean requestSucceeded = anHTTPConnection.sendRequest(aRequest);
 
             if (requestSucceeded) {
+                logger.debug("Received response from instance");
                 aResponse = anHTTPConnection.readResponse();
             } else {
+                logger.debug("Failed to receive response from instance");
                 throw new MonitorException(_hostName + ": Failed to receive response from " + anInstance.displayName());
             }
             anInstance.succeededInConnection();
         } catch (NSForwardException ne) {
             if (ne.originalException() instanceof IOException) {
+                logger.debug("Failed to connect to instance");
                 anInstance.failedToConnect();
                 throw new MonitorException(_hostName + ": Timeout while connecting to " + anInstance.displayName());
             }
@@ -547,6 +556,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
             anInstance.failedToConnect();
             throw me;
         } catch (Exception e) {
+            logger.debug("Failed to connect to instance with exception", e);
             anInstance.failedToConnect();
             throw new MonitorException(_hostName + ": Error while communicating with " + anInstance.displayName() + ": " + e);
         }
