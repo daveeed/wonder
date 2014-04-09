@@ -31,6 +31,8 @@ import javax.management.remote.JMXConnectorServer;
 import javax.management.remote.JMXConnectorServerFactory;
 import javax.management.remote.JMXServiceURL;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.sshd.SshServer;
 import org.apache.sshd.common.NamedFactory;
 import org.apache.sshd.server.Command;
@@ -45,6 +47,7 @@ import com.webobjects.appserver.WOApplication;
 import com.webobjects.appserver.WORequest;
 import com.webobjects.appserver.WORequestHandler;
 import com.webobjects.appserver.WOResponse;
+import com.webobjects.appserver._private.WOHostUtilities;
 import com.webobjects.foundation.NSData;
 import com.webobjects.foundation.NSDictionary;
 import com.webobjects.foundation.NSLog;
@@ -72,6 +75,8 @@ public class Application extends ERXApplication  {
     private boolean _shouldWriteAdaptorConfig;
     private boolean _shouldRespondToMulticast;
     public _NSCollectionReaderWriterLock _lock;
+    private static final Logger logger = Logger.getLogger(Application.class);
+
     
 	//========================================================================================
 	//     JMX Instance Variables 
@@ -152,6 +157,7 @@ public class Application extends ERXApplication  {
             if (!NSLog.debugLoggingAllowedForLevel(NSLog.DebugLevelInformational)) {
             	NSLog.debug.setAllowedDebugLevel(NSLog.DebugLevelInformational);
             }
+            Logger.getLogger("com.webobjects.monitor.wotaskd").setLevel(Level.DEBUG);
         }
 
         com.webobjects.appserver._private.WOHttpIO._alwaysAppendContentLength = false;
@@ -258,6 +264,7 @@ public class Application extends ERXApplication  {
             e.printStackTrace();
           }
         }
+        logger.info("wotaskd accepting lifebeats from " + WOHostUtilities.getLocalHosts());
     }
     
     public class SshPasswordAuthenticator implements PasswordAuthenticator {
