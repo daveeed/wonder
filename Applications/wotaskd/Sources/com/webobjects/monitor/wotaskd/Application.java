@@ -158,6 +158,7 @@ public class Application extends ERXApplication  {
             	NSLog.debug.setAllowedDebugLevel(NSLog.DebugLevelInformational);
             }
             Logger.getLogger("com.webobjects.monitor.wotaskd").setLevel(Level.DEBUG);
+            Logger.getLogger("com.webobjects.monitor._private").setLevel(Level.DEBUG);
         }
 
         com.webobjects.appserver._private.WOHttpIO._alwaysAppendContentLength = false;

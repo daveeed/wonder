@@ -39,7 +39,7 @@ public class ProcessStreamLogger extends Thread {
                 }
             }
             reader.close();
-            logger.debug("Instance outout now going to " + MObject.validatedOutputPath(instance.outputPath()));
+            logger.debug("Instance output now going to " + MObject.validatedOutputPath(instance.outputPath()));
         } catch (Exception e) {
             logger.error("The log reader died unexpectedly.", e);
         }

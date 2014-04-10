@@ -62,7 +62,7 @@ public class DirectAction extends WODirectAction  {
     static private String _emptyXML;
     static private NSDictionary _argumentNumberCommandError;
     static private NSTimestampFormatter aFormat = null;
-    private static final Logger logger = Logger.getLogger(DirectAction.class);
+    static final Logger logger = Logger.getLogger(DirectAction.class);
     
     
     static {
@@ -540,10 +540,10 @@ public class DirectAction extends WODirectAction  {
                     for (Enumeration e = instanceArray.objectEnumerator(); e.hasMoreElements(); ) {
                         MInstance anInst = (MInstance) e.nextElement();
                         if (anInst.isRunning_W()) {
-                            logger.debug(anInst.displayName() + " is calculated to be running (receiving lifebeats)");
+                            logger.debug(anInst.displayName() + " is sending lifebeats");
                             runningInstanceArray.addObject(anInst);
                         } else { 
-                            logger.debug(anInst.displayName() + " is calculated to be NOT running (not receiving lifebeats)");
+                            logger.debug(anInst.displayName() + " is NOT sending lifebeats");
                         }
                     }
                     getStatisticsForInstanceArray(runningInstanceArray, errorResponse);
@@ -621,9 +621,10 @@ public class DirectAction extends WODirectAction  {
             Runnable work = new Runnable() {
                 public void run() {
                     try {
-                        logger.debug("Getting instance data for: " + ((MInstance) instanceArray.objectAtIndex(j)).displayName());
-                        responses[j] = localMonitor.queryInstance((MInstance) instanceArray.objectAtIndex(j));
-                        logger.debug("Got instance data for: " + ((MInstance) instanceArray.objectAtIndex(i)).displayName());
+                        MInstance instance = (MInstance) instanceArray.objectAtIndex(j);
+                        logger.debug("Getting instance data for: " + instance.displayName());
+                        responses[j] = localMonitor.queryInstance(instance);
+                        logger.debug("Got instance data for: " + instance.displayName());
                     } catch (MonitorException me) {
                         logger.debug("Exception getting instance data for: " + ((MInstance) instanceArray.objectAtIndex(j)).displayName(), me);
                         MInstance badInstance = ((MInstance) instanceArray.objectAtIndex(j));
@@ -636,7 +637,7 @@ public class DirectAction extends WODirectAction  {
                     	//java monitor which instance its having problems with
                         if (badInstance.isRunning_W()) {
                             badInstance.setStatisticsError(me.getMessage());
-                            NSLog.debug.appendln("Instance is still running: " + badInstance.displayName());
+                            NSLog.debug.appendln(badInstance.displayName() + " still sending heartbeats");
                         }
                         responses[j] =  null;
                     }
@@ -659,7 +660,6 @@ public class DirectAction extends WODirectAction  {
             WOResponse aResponse = responses[i];
             MInstance anInstance = (MInstance) instArray.objectAtIndex(i);
             if (aResponse != null) {
-                anInstance.updateRegistration(new NSTimestamp());
                 if (aResponse.headerForKey("x-webobjects-refusenewsessions") != null) {
                     anInstance.setRefusingNewSessions(true);
                 } else {

@@ -70,6 +70,8 @@ public class LifebeatRequestHandler extends WORequestHandler {
             }
             return _handleRequest(aRequest);
         }
+        
+        log.error("Igoring lifebeat from " + aRequest._originatingAddress() + ": " + aRequest.queryString());
         return null;
     }
 
@@ -89,14 +91,14 @@ public class LifebeatRequestHandler extends WORequestHandler {
             String host = (String)values.objectAtIndex(2);
             String port = (String)values.objectAtIndex(3);
 
-            if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelInformational, NSLog.DebugGroupDeployment))
-                NSLog.debug.appendln("@@@@@ Received Lifebeat: " + notificationType + " " + instanceName + " " + host + " " + port);
+            log.trace("Received Lifebeat: " + notificationType + " " + instanceName + " " + host + " " + port);
 
             if (notificationType.equals("lifebeat")) {
                 // app is still alive - update registration
                 // if app is not yet registered, register
                 // if the instance should die, return DieResponse
                 if (registerLifebeat(instanceName, host, port) == false) {
+                    log.debug("Returning DIE response");
                     aResponse = DieResponse;
                 } else {
 		    aResponse = GoodResponse;
