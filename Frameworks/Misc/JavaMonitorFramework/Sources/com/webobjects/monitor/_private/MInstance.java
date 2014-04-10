@@ -17,6 +17,8 @@ import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import org.apache.log4j.Logger;
+
 import com.webobjects.appserver.WOApplication;
 import com.webobjects.appserver.WOMailDelivery;
 import com.webobjects.foundation.NSArray;
@@ -38,7 +40,8 @@ public class MInstance extends MObject {
 
     public static final ERXKey<MHost> HOST = new ERXKey<MHost>("host");
     public static final ERXKey<String> HOST_NAME = new ERXKey<String>("hostName");
-
+    private static final Logger logger = Logger.getLogger(MInstance.class);
+    
     /*
      * String hostName; Integer id; Integer port; String applicationName;
      * Boolean autoRecover; Integer minimumActiveSessionsCount; String path;
@@ -625,8 +628,10 @@ public class MInstance extends MObject {
 
     public void failedToConnect() {
         _connectFailureCount++;
-        if (_connectFailureCount > 2) {
-            state = MObject.DEAD;
+        if (_connectFailureCount > 2) {  // Make into property
+            state = MObject.STOPPING;
+            logger.error(displayName() + " failed to connect twice, telling to die");
+            setShouldDie(true);
             _lastRegistration = NSTimestamp.DistantPast;
         }
     }
@@ -739,19 +744,15 @@ public class MInstance extends MObject {
     }
 
     public void updateRegistration(NSTimestamp registrationDate) {
-        succeededInConnection();
         _lastRegistration = registrationDate;
     }
 
     public void registerStop(NSTimestamp registrationDate) {
-        succeededInConnection();
         _lastRegistration = NSTimestamp.DistantPast;
         state = MObject.DEAD;
     }
 
     public void registerCrash(NSTimestamp registrationDate) {
-        succeededInConnection();
-        _lastRegistration = NSTimestamp.DistantPast;
         state = MObject.CRASHING;
     }
 

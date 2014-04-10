@@ -53,6 +53,8 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     WOTimer aScheduleTimer;
     WOTimer anAutoRecoverTimer;
     WOTimer anAutoRecoverStartupTimer;
+    WOTimer instanceMonitorTimer;
+    
     String _hostName;
     boolean _isOnWindows = false;
     boolean _shouldUseSpawn = true;
@@ -62,7 +64,8 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     final int _receiveTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.receiveTimeout", 5000);
     final int _sendTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.sendTimeout", 5000);
     final boolean _forceQuitTaskEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.forceQuitTaskEnabled", false);
-    private static final Logger logger = Logger.getLogger(LocalMonitor.class);
+    final boolean _instanceMonitorEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.instanceMonitorEnabled", false);
+    static final Logger logger = Logger.getLogger(LocalMonitor.class);
 
 
     public LocalMonitor() {
@@ -298,6 +301,9 @@ public class LocalMonitor extends ProtoLocalMonitor  {
             // This is the regular timer that should do autorecovery
             anAutoRecoverTimer = WOTimer.scheduledTimer(aConfig.autoRecoverInterval(), this, "_checkAutoRecover", null, null, true);
 
+            if (_instanceMonitorEnabled) {
+                instanceMonitorTimer = WOTimer.scheduledTimer(aConfig.instanceMonitorInterval(), this, "_checkInstancesRunning", null, null, true);
+            }
         } finally {
             theApplication._lock.endReading();
         }
@@ -396,6 +402,48 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
             NSLog.debug.appendln("_checkSchedules STOP");
     }
+    
+    public void _checkInstancesRunning() {
+        logger.trace("_checkInstancesRunning START");
+        theApplication._lock.startReading();
+        try {
+            MHost theHost = theApplication.siteConfig().localHost();
+            if (theHost != null) {
+                final NSArray instArray = theHost.instanceArray();
+                int instArrayCount = instArray.count();
+                
+                final LocalMonitor localMonitor = this;
+    
+                Thread[] workers = new Thread[instArrayCount];
+    
+                for (int i=0; i<workers.length; i++) {
+                    final int j = i;
+                    Runnable work = new Runnable() {
+                        public void run() {
+                            MInstance instance = (MInstance)instArray.objectAtIndex(j);
+                            try {
+                                logger.debug("Pinging instance " + instance.displayName());
+                                localMonitor.pingInstance(instance);
+                            } catch (MonitorException e) {
+                                logger.trace("Threw pinging instance " + instance.displayName(), e);
+                            }
+                        }
+                    };
+                    workers[i] = new Thread(work);
+                    workers[i].start();
+                }
+    
+                try {
+                    for (int i=0; i<workers.length; i++) {
+                        workers[i].join();
+                    }
+                } catch (InterruptedException ie) {}
+            }
+        } finally {
+            theApplication._lock.endReading();
+        }
+        logger.trace("_checkInstancesRunning STOP");
+    }
     /**********/
 
 
@@ -470,7 +518,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         
         catchInstanceErrors(anInstance);
         NSDictionary xmlDict = createInstanceRequestDictionary("TERMINATE", null, anInstance);
-        return sendInstanceRequest(anInstance, xmlDict);
+        return sendAdminRequest(anInstance, xmlDict);
     }
 
     @Override
@@ -492,20 +540,26 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         
         catchInstanceErrors(anInstance);
         NSDictionary xmlDict = createInstanceRequestDictionary("REFUSE", null, anInstance);
-        return sendInstanceRequest(anInstance, xmlDict);
+        return sendAdminRequest(anInstance, xmlDict);
     }
 
     public WOResponse setAcceptInstance(MInstance anInstance) throws MonitorException {
         catchInstanceErrors(anInstance);
         NSDictionary xmlDict = createInstanceRequestDictionary("ACCEPT", null, anInstance);
-        return sendInstanceRequest(anInstance, xmlDict);
+        return sendAdminRequest(anInstance, xmlDict);
     }
 
     @Override
     public WOResponse queryInstance(MInstance anInstance) throws MonitorException {
         catchInstanceErrors(anInstance);
         NSDictionary xmlDict = createInstanceRequestDictionary(null, "STATISTICS", anInstance);
-        return sendInstanceRequest(anInstance, xmlDict);
+        return sendAdminRequest(anInstance, xmlDict);
+    }
+    
+    @Override
+    public WOResponse pingInstance(MInstance anInstance) throws MonitorException {
+        catchInstanceErrors(anInstance);
+        return sendPingRequest(anInstance);
     }
 
     protected void catchInstanceErrors(MInstance anInstance) throws MonitorException {
@@ -518,15 +572,27 @@ public class LocalMonitor extends ProtoLocalMonitor  {
             throw new MonitorException(_hostName + ": " + anInstance.displayName() + " is not running");
     }
 
-    protected WOResponse sendInstanceRequest(MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
+    protected WOResponse sendAdminRequest(MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
+        return sendToInstance(MObject.adminActionStringPostfix, anInstance, xmlDict);
+    }
+    
+    protected WOResponse sendPingRequest(MInstance anInstance) throws MonitorException {
+        return sendToInstance(MObject.pingActionStringPostfix, anInstance, null);
+    }
+
+    protected WOResponse sendToInstance(String action, MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
         if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
             NSLog.debug.appendln("!@#$!@#$ sendInstanceRequest creates a WOHTTPConnection");
 
-        String contentXML = (new _JavaMonitorCoder()).encodeRootObjectForKey(xmlDict, "instanceRequest");
-        NSData content = new NSData(contentXML);
+        NSData content = null;
+        if (xmlDict != null) {
+            String contentXML = (new _JavaMonitorCoder()).encodeRootObjectForKey(xmlDict, "instanceRequest");
+            content = new NSData(contentXML);
+        } else {
+            content = new NSData();
+        }
 
-        //        String urlString = MObject.adminActionStringPrefix + anInstance.application().realName() + MObject.adminActionStringPostfix;
-        String urlString = MObject.adminActionStringPrefix + anInstance.applicationName() + MObject.adminActionStringPostfix;
+        String urlString = MObject.adminActionStringPrefix + anInstance.applicationName() + action;
         WORequest aRequest = new WORequest(MObject._POST, urlString, MObject._HTTP1, null, content, null);
         WOResponse aResponse = null;
 
@@ -534,11 +600,11 @@ public class LocalMonitor extends ProtoLocalMonitor  {
             WOHTTPConnection anHTTPConnection = new WOHTTPConnection(anInstance.host().name(), anInstance.port().intValue());
             anHTTPConnection.setReceiveTimeout(_receiveTimeout);
             anHTTPConnection.setSendTimeout(_sendTimeout);
-            logger.debug("Sending request to instance");
+            logger.trace("Sending request to instance: " + action);
             boolean requestSucceeded = anHTTPConnection.sendRequest(aRequest);
 
             if (requestSucceeded) {
-                logger.debug("Received response from instance");
+                logger.trace("Received response from instance");
                 aResponse = anHTTPConnection.readResponse();
             } else {
                 logger.debug("Failed to receive response from instance");
@@ -547,7 +613,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
             anInstance.succeededInConnection();
         } catch (NSForwardException ne) {
             if (ne.originalException() instanceof IOException) {
-                logger.debug("Failed to connect to instance");
+                logger.debug("Failed to connect to instance" + anInstance.displayName());
                 anInstance.failedToConnect();
                 throw new MonitorException(_hostName + ": Timeout while connecting to " + anInstance.displayName());
             }

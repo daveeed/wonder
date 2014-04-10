@@ -20,5 +20,6 @@ public abstract class ProtoLocalMonitor {
     public abstract WOResponse terminateInstance(MInstance anInstance) throws MonitorException;
     public abstract WOResponse stopInstance(MInstance anInstance) throws MonitorException;
     public abstract WOResponse queryInstance(MInstance anInstance) throws MonitorException;
+    public abstract WOResponse pingInstance(MInstance anInstance) throws MonitorException;
     public abstract StringBuffer generateAdaptorConfigXML();
 }

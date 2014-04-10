@@ -49,6 +49,7 @@ import com.webobjects.foundation._NSThreadsafeMutableDictionary;
 
 import er.extensions.appserver.ERXRequest;
 import er.extensions.foundation.ERXFileUtilities;
+import er.extensions.foundation.ERXProperties;
 
 
 public class MSiteConfig extends MObject {
@@ -1130,6 +1131,11 @@ public class MSiteConfig extends MObject {
         return smallestInterval * 1000;
     }
 
+    public long instanceMonitorInterval() {
+        // Expose this in JavaMonitor?
+        return ERXProperties.longForKeyWithDefault("WOTaskd.instanceMonitorCheckInterval", 60 * 1000);
+    }
+    
     public MApplication applicationWithName(String anAppName) {
         if (anAppName == null) return null;
 
