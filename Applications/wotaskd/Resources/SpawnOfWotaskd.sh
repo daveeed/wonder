@@ -16,6 +16,6 @@ if [ -f /tmp/logWebObjects ]; then
 
 else
 
-	$@ 1>/dev/null 2>&1 &
+	$@ 2>&1 &
 
 fi
