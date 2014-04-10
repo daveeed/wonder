@@ -91,7 +91,7 @@ public class LifebeatRequestHandler extends WORequestHandler {
             String host = (String)values.objectAtIndex(2);
             String port = (String)values.objectAtIndex(3);
 
-            log.trace("Received Lifebeat: " + notificationType + " " + instanceName + " " + host + " " + port);
+            log.trace("Received Lifebeat: " + notificationType + " from " + instanceName + " on " + host + ":" + port);
 
             if (notificationType.equals("lifebeat")) {
                 // app is still alive - update registration
@@ -101,7 +101,7 @@ public class LifebeatRequestHandler extends WORequestHandler {
                     log.debug("Returning DIE response");
                     aResponse = DieResponse;
                 } else {
-		    aResponse = GoodResponse;
+                    aResponse = GoodResponse;
                 }
             } else if (notificationType.equals("hasStarted")) {
                 // app has just started - register instance

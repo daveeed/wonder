@@ -75,7 +75,7 @@ public class Application extends ERXApplication  {
     private boolean _shouldWriteAdaptorConfig;
     private boolean _shouldRespondToMulticast;
     public _NSCollectionReaderWriterLock _lock;
-    private static final Logger logger = Logger.getLogger(Application.class);
+    static final Logger logger = Logger.getLogger(Application.class);
 
     
 	//========================================================================================
@@ -148,8 +148,7 @@ public class Application extends ERXApplication  {
         super();
         _lock = new _NSCollectionReaderWriterLock();
 
-        String dd = System.getProperties().getProperty("_DeploymentDebugging");
-        if (dd != null) {
+        if (ERXProperties.booleanForKeyWithDefault("_DeploymentDebugging", false)) {
             NSLog.debug.setIsVerbose(true);
             NSLog.out.setIsVerbose(true);
             NSLog.err.setIsVerbose(true);
@@ -161,6 +160,17 @@ public class Application extends ERXApplication  {
             Logger.getLogger("com.webobjects.monitor._private").setLevel(Level.DEBUG);
         }
 
+        if (ERXProperties.booleanForKeyWithDefault("_DeploymentTracing", false)) {
+            NSLog.debug.setIsVerbose(true);
+            NSLog.out.setIsVerbose(true);
+            NSLog.err.setIsVerbose(true);
+            NSLog.allowDebugLoggingForGroups(NSLog.DebugGroupDeployment);
+            if (!NSLog.debugLoggingAllowedForLevel(NSLog.DebugLevelInformational)) {
+                NSLog.debug.setAllowedDebugLevel(NSLog.DebugLevelInformational);
+            }
+            Logger.getLogger("com.webobjects.monitor.wotaskd").setLevel(Level.TRACE);
+            Logger.getLogger("com.webobjects.monitor._private").setLevel(Level.TRACE);
+        }
         com.webobjects.appserver._private.WOHttpIO._alwaysAppendContentLength = false;
         
         // Setting the ports
@@ -206,10 +216,10 @@ public class Application extends ERXApplication  {
         if (shouldMC != null) {
             if (!String_Extensions.boolValue(shouldMC)) {
                 _shouldRespondToMulticast = false;
-                NSLog.debug.appendln("Multicast Response Disabled");
+                logger.debug("Multicast Response Disabled");
             } else {
                 _shouldRespondToMulticast = true;
-                NSLog.debug.appendln("Multicast Response Enabled");
+                logger.debug("Multicast Response Enabled");
             }
         }
 
@@ -261,11 +271,12 @@ public class Application extends ERXApplication  {
             sshd.start();
           }
           catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            logger.error("Failed starting SSH server", e);
           }
         }
-        logger.info("wotaskd accepting lifebeats from " + WOHostUtilities.getLocalHosts());
+        
+        logger.info("wotaskd accepting lifebeats from theese hosts:" + WOHostUtilities.getLocalHosts());
+        logger.info("wotask is listening on " + host() + ":" + port());
     }
     
     public class SshPasswordAuthenticator implements PasswordAuthenticator {
@@ -308,13 +319,13 @@ public class Application extends ERXApplication  {
 		try {
 			getMBeanServer().registerMBean(objMBean, objName);
 		} catch (IllegalAccessException e) {
-			NSLog.err.appendln("ERROR: security access problem registering bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
+			logger.error("ERROR: security access problem registering bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
 		} catch (InstanceAlreadyExistsException e) {
-			NSLog.err.appendln("ERROR: MBean already exists bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
+			logger.error("ERROR: MBean already exists bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
 		} catch (MBeanRegistrationException e) {
-			NSLog.err.appendln("ERROR: error registering bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
+			logger.error("ERROR: error registering bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
 		} catch (NotCompliantMBeanException e) {
-			NSLog.err.appendln("ERROR: error registering bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
+			logger.error("ERROR: error registering bean: "+objMBean+" with ObjectName: "+objName+" "+e.toString());
 		} 
 	}
 	
@@ -359,14 +370,14 @@ public class Application extends ERXApplication  {
 				// setup our listener
 				java.rmi.registry.LocateRegistry.createRegistry(intWotaskdJmxPort);
 				JMXServiceURL jsUrl = new JMXServiceURL("service:jmx:rmi:///jndi/rmi://"+host()+":"+intWotaskdJmxPort+"/jmxrmi");
-				NSLog.debug.appendln("Setting up monitoring on url : " + jsUrl);
+				logger.debug("Setting up monitoring on url : " + jsUrl);
 
 				// Create an RMI Connector Server
 				JMXConnectorServer jmxCS = JMXConnectorServerFactory.newJMXConnectorServer(jsUrl, envPwd, getMBeanServer());
 
 				jmxCS.start();
 			} catch (Exception anException) {
-				NSLog.err.appendln("Error starting remote monitoring: " + anException);
+				logger.error("Error starting remote monitoring: " + anException);
 			}
 		}
 	}
@@ -393,10 +404,10 @@ public class Application extends ERXApplication  {
 	 * This method reads the SiteConfig.xml file whenever it is invoked by the SiteConfigMBean
 	 */
 	public void readSiteConfigXML() {
-		NSLog.debug.appendln("Inside readSiteConfigXML method of Application.java: Calling unarchiveSiteConfig");
+		logger.debug("Inside readSiteConfigXML method of Application.java: Calling unarchiveSiteConfig");
 		_siteConfig = MSiteConfig.unarchiveSiteConfig(true);
 
-		NSLog.debug.appendln("Inside readSiteConfigXML method of Application.java: Calling archiveSiteConfig");
+		logger.debug("Inside readSiteConfigXML method of Application.java: Calling archiveSiteConfig");
 		_siteConfig.archiveSiteConfig();
 	}
 	
@@ -423,8 +434,7 @@ public class Application extends ERXApplication  {
 
     // creates and starts the ListenerThread inner class
     public void createRequestListenerThread() {
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelInformational, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("Detaching request listen thread");
+        logger.debug("Detaching request listen thread");
         listenThread = new Application.ListenThread();
         listenThread.start();
     }
@@ -474,9 +484,7 @@ public class Application extends ERXApplication  {
                     socket.setInterface(WOApplication.application().hostAddress());
                 }
             } catch (IOException exception) {
-                NSLog.err.appendln("Unable to create multicast listener socket: " + exception);
-                NSLog.err.appendln("Port " + intPort() + " may be in use by another application.");
-                NSLog.err.appendln("Exiting...");
+                logger.error("Unable to create multicast listener socket.  Port " + intPort() + " may be in use by another application, Exiting...",exception);
                 System.exit(1);
             }
 
@@ -484,22 +492,19 @@ public class Application extends ERXApplication  {
                 try {
                     address = InetAddress.getByName(multicastAddress());
                 } catch (UnknownHostException exception) {
-                    NSLog.err.appendln("Error resolving address: " + multicastAddress() + " - " + exception);
-                    NSLog.err.appendln("Exiting...");
+                    logger.error("Error resolving address: " + multicastAddress() + ". Exiting...", exception);
                     System.exit(1);
                 }
 
                 if (!address.isMulticastAddress()) {
-                    NSLog.err.appendln(address + " is not a valid multicast address");
-                    NSLog.err.appendln("Exiting...");
+                    logger.error(address + " is not a valid multicast address.  Exiting...");
                     System.exit(1);
                 }
 
                 try {
                     socket.joinGroup(address);
                 } catch (IOException exception) {
-                    NSLog.err.appendln("Error joining multicast group: " + exception);
-                    NSLog.err.appendln("Exiting...");
+                    logger.error("Error joining multicast group.  Exiting...", exception);
                     System.exit(1);
                 }
             }
@@ -508,15 +513,12 @@ public class Application extends ERXApplication  {
         public void closeRequestSocket() {
             try {
                 socket.leaveGroup(address);
-                if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelInformational, NSLog.DebugGroupDeployment))
-                    NSLog.debug.appendln("Leaving multicast group");
+                logger.debug("Leaving multicast group");
             } catch (IOException exception) {
-                if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelCritical, NSLog.DebugGroupDeployment))
-                    NSLog.debug.appendln("Error leaving multicast group " + exception);
+                logger.debug("Error leaving multicast group " + exception);
                 return;
             }
-            if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelInformational, NSLog.DebugGroupDeployment))
-                NSLog.debug.appendln("Closing request listen socket");
+            logger.debug("Closing request listen socket");
             socket.close();
         }
 
@@ -526,7 +528,7 @@ public class Application extends ERXApplication  {
             try {
                 socket.send(outgoingPacket);
             } catch(IOException localException) {
-                NSLog.err.appendln("Error sending reply: " + localException + " (ignored)");
+                logger.error("Error sending reply: " + localException + " (ignored)");
             }
         }
 
@@ -583,21 +585,18 @@ public class Application extends ERXApplication  {
                             String key = incomingPacket.getAddress() + ":" + incomingPacket.getPort();
 
                             siteConfig().globalErrorDictionary.takeValueForKey( (myName + ": Unrecognized UDP packet: " + new String(incomingPacket.getData()) + " from " + key + ". This may be an Application that conforms to an older protocol.") , key);
-                            if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelCritical, NSLog.DebugGroupDeployment))
-                                NSLog.debug.appendln(myName + ": Unrecognized UDP packet: " + new String(incomingPacket.getData()) + " from " + key + ". This may be an Application that conforms to an older protocol.");
+                            logger.debug(myName + ": Unrecognized UDP packet: " + new String(incomingPacket.getData()) + " from " + key + ". This may be an Application that conforms to an older protocol.");
                         }
                     } catch(IOException localException) {
-                        NSLog.err.appendln("Error receiving packet: " + localException + " (ignored)");
+                        logger.error("Error (ignored) receiving packet", localException);
                     }
 
                 }
 
                 // Hari-kiri - but should never happen, of course.
-                NSLog.err.appendln("wotaskd listen thread exiting because of bad socket");
+                logger.error("wotaskd listen thread exiting because of bad socket");
             } catch (Throwable t) {
-                NSLog.err.appendln("Listen thread exiting with exception: " + t);
-                if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelCritical, NSLog.DebugGroupDeployment))
-                    NSLog.debug.appendln(t);
+                logger.error("Listen thread exiting with exception", t);
             }
             System.exit(1);
         }
@@ -605,7 +604,7 @@ public class Application extends ERXApplication  {
         @Override
         public void run() {
             createRequestSocket();
-            NSLog.debug.appendln("Created UDP socket; listening for requests...");
+            logger.debug("Created UDP socket; listening for requests...");
             listenForRequests();
         }
     }

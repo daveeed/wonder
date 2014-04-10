@@ -758,7 +758,6 @@ public class MInstance extends MObject {
 
     public void sendDeathNotificationEmail() {
     	NSTimestamp currentTime = new NSTimestamp();
-        String currentDate = currentTime.toString();
 
         String assumedToBeDead = "";
         if (_lastRegistration == NSTimestamp.DistantPast) {
@@ -774,12 +773,13 @@ public class MInstance extends MObject {
             }   
         }
 
+        NSTimestampFormatter timestampFormatter = new NSTimestampFormatter();
     	String message = "Application '" + displayName() + "' on " + _host.name() + ":" + port() +
-	        " stopped running at " + (currentDate) + ".\n" + 
+	        " stopped running at " + timestampFormatter.format(currentTime) + ".\n" + 
 	        "The app's current state was: " + stateArray[state] + ".\n" +
 	        assumedToBeDead + 
 	        "The last successful communication occurred at: " + 
-	        (_lastRegistration == NSTimestamp.DistantPast ? "(none)" : _lastRegistration.toString()) + ". " + 
+	        (_lastRegistration == NSTimestamp.DistantPast ? "(none)" : timestampFormatter.format(_lastRegistration)) + ". " + 
 	        "This may be the result of a crash or an intentional shutdown from outside of wotaskd";
         
     	NSLog.err.appendln(message);

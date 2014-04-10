@@ -32,7 +32,6 @@ import com.webobjects.foundation.NSArray;
 import com.webobjects.foundation.NSData;
 import com.webobjects.foundation.NSDictionary;
 import com.webobjects.foundation.NSForwardException;
-import com.webobjects.foundation.NSLog;
 import com.webobjects.foundation.NSMutableDictionary;
 import com.webobjects.foundation.NSPathUtilities;
 import com.webobjects.foundation.NSSocketUtilities;
@@ -65,8 +64,9 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     final int _sendTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.sendTimeout", 5000);
     final boolean _forceQuitTaskEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.forceQuitTaskEnabled", false);
     final boolean _instanceMonitorEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.instanceMonitorEnabled", false);
+    final boolean _logAppStartupEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.logAppStartupEnabled", false);
+    
     static final Logger logger = Logger.getLogger(LocalMonitor.class);
-
 
     public LocalMonitor() {
         MSiteConfig aConfig = theApplication.siteConfig();
@@ -234,8 +234,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
 
     /********** Timer Targets **********/
     public void _checkAutoRecover() {
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("_checkAutoRecover START");
+        logger.trace("_checkAutoRecover START");
         theApplication._lock.startReading();
         try {
             MHost theHost = theApplication.siteConfig().localHost();
@@ -257,14 +256,12 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         } finally {
             theApplication._lock.endReading();
         }
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("_checkAutoRecover STOP");
+        logger.trace("_checkAutoRecover STOP");
     }
 
     // This only runs once, on startup - then it starts the regular timer
     public void _checkAutoRecoverStartup() {
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("_checkAutoRecoverStartup START");
+        logger.trace("_checkAutoRecoverStartup START");
         theApplication._lock.startReading();
         try {
             MSiteConfig aConfig = theApplication.siteConfig();
@@ -307,8 +304,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         } finally {
             theApplication._lock.endReading();
         }
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("_checkAutoRecoverStartup STOP");
+        logger.trace("_checkAutoRecoverStartup STOP");
     }
 
     private void _autoRecoverApplication(MApplication anApplication) {
@@ -350,8 +346,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
 
 
     public void _checkSchedules() {
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("_checkSchedules START");
+        logger.trace("_checkSchedules START");
         theApplication._lock.startReading();
         try {
 
@@ -381,7 +376,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
                                     anInst.calculateNextScheduledShutdown();
                                 }
                             } catch (MonitorException me) {
-                                NSLog.err.appendln("Exception while scheduling: " + me.getMessage());
+                                logger.error("Exception while scheduling: " + me.getMessage());
                             }
                         }
                     };
@@ -399,8 +394,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         } finally {
             theApplication._lock.endReading();
         }
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("_checkSchedules STOP");
+        logger.trace("_checkSchedules STOP");
     }
     
     public void _checkInstancesRunning() {
@@ -422,7 +416,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
                         public void run() {
                             MInstance instance = (MInstance)instArray.objectAtIndex(j);
                             try {
-                                logger.debug("Pinging instance " + instance.displayName());
+                                logger.trace("Pinging instance " + instance.displayName());
                                 localMonitor.pingInstance(instance);
                             } catch (MonitorException e) {
                                 logger.trace("Threw pinging instance " + instance.displayName(), e);
@@ -489,12 +483,13 @@ public class LocalMonitor extends ProtoLocalMonitor  {
         }
 
         try {
-            if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelCritical, NSLog.DebugGroupDeployment))
-                NSLog.debug.appendln("Starting Instance: " + aLaunchPath);
+            logger.debug("Starting Instance " + anInstance.displayName() + " with command: " + aLaunchPath);
             Process p = Runtime.getRuntime().exec(aLaunchPath);
-            new ProcessStreamLogger(anInstance, logger, p).start();
+            if (_logAppStartupEnabled) {
+                new ProcessStreamLogger(anInstance, logger, p).start();
+            }
         } catch (IOException ioe) {
-            NSLog.err.appendln("Failed to start " + anInstance.displayName() + ": " + ioe);
+            logger.error("Failed to start " + anInstance.displayName() + ": " + ioe);
             return _hostName + ": Failed to start " + anInstance.displayName() + ": " + ioe;
         }
         return null;
@@ -512,7 +507,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
                	anInstance.scheduleForceQuit(new MInstanceTask.ForceQuit(anInstance), _forceQuitDelay);
             }
             else {
-            	NSLog.err.appendln("WOtaskd.killTimeout: " + _forceQuitDelay + " is too small. 60000 milliseconds is the minimum");
+            	logger.error("WOtaskd.killTimeout: " + _forceQuitDelay + " is too small. 60000 milliseconds is the minimum");
             }
         }
         
@@ -534,7 +529,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
                	anInstance.scheduleRefuseTask(new MInstanceTask.Refuse(anInstance, ERXProperties.intForKeyWithDefault("WOTaskd.refuseNumRetries", 3)), _forceQuitDelay, _forceQuitDelay);
             }
             else {
-            	NSLog.err.appendln("WOtaskd.killTimeout: " + _forceQuitDelay + " is too small. 60000 milliseconds is the minimum");
+            	logger.error("WOtaskd.killTimeout: " + _forceQuitDelay + " is too small. 60000 milliseconds is the minimum");
             }
         }
         
@@ -581,9 +576,6 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     }
 
     protected WOResponse sendToInstance(String action, MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
-        if (NSLog.debugLoggingAllowedForLevelAndGroups(NSLog.DebugLevelDetailed, NSLog.DebugGroupDeployment))
-            NSLog.debug.appendln("!@#$!@#$ sendInstanceRequest creates a WOHTTPConnection");
-
         NSData content = null;
         if (xmlDict != null) {
             String contentXML = (new _JavaMonitorCoder()).encodeRootObjectForKey(xmlDict, "instanceRequest");
