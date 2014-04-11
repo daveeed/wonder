@@ -12,6 +12,9 @@ package com.webobjects.monitor.application;
  IN NO EVENT SHALL APPLE BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) ARISING IN ANY WAY OUT OF THE USE, REPRODUCTION, MODIFICATION AND/OR DISTRIBUTION OF THE APPLE SOFTWARE, HOWEVER CAUSED AND WHETHER UNDER THEORY OF CONTRACT, TORT (INCLUDING NEGLIGENCE), STRICT LIABILITY OR OTHERWISE, EVEN IF APPLE HAS BEEN  ADVISED OF THE POSSIBILITY OF 
  SUCH DAMAGE.
  */
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+
 import com.webobjects.appserver.WORequest;
 import com.webobjects.appserver._private.WODirectActionRequestHandler;
 import com.webobjects.foundation.NSArray;
@@ -23,6 +26,7 @@ import com.webobjects.monitor.rest.MHostController;
 import com.webobjects.monitor.rest.MSiteConfigController;
 
 import er.extensions.appserver.ERXApplication;
+import er.extensions.foundation.ERXProperties;
 import er.rest.routes.ERXRoute;
 import er.rest.routes.ERXRouteRequestHandler;
 
@@ -34,14 +38,29 @@ public class Application extends ERXApplication {
 
     public Application() {
         super();
-        String dd = System.getProperties().getProperty("_DeploymentDebugging");
-        if (dd != null) {
+        
+        if (ERXProperties.booleanForKeyWithDefault("_DeploymentDebugging", false)) {
             NSLog.debug.setIsVerbose(true);
             NSLog.out.setIsVerbose(true);
             NSLog.err.setIsVerbose(true);
             NSLog.allowDebugLoggingForGroups(NSLog.DebugGroupDeployment);
-            NSLog.debug.setAllowedDebugLevel(NSLog.DebugLevelDetailed);
+            if (!NSLog.debugLoggingAllowedForLevel(NSLog.DebugLevelInformational)) {
+                NSLog.debug.setAllowedDebugLevel(NSLog.DebugLevelInformational);
+            }
+            Logger.getLogger("com.webobjects.monitor").setLevel(Level.DEBUG);
         }
+
+        if (ERXProperties.booleanForKeyWithDefault("_DeploymentTracing", false)) {
+            NSLog.debug.setIsVerbose(true);
+            NSLog.out.setIsVerbose(true);
+            NSLog.err.setIsVerbose(true);
+            NSLog.allowDebugLoggingForGroups(NSLog.DebugGroupDeployment);
+            if (!NSLog.debugLoggingAllowedForLevel(NSLog.DebugLevelInformational)) {
+                NSLog.debug.setAllowedDebugLevel(NSLog.DebugLevelInformational);
+            }
+            Logger.getLogger("com.webobjects.monitor").setLevel(Level.TRACE);
+        }
+        
         WOTaskdHandler.createSiteConfig();
         registerRequestHandler(new WODirectActionRequestHandler() {
             @Override
