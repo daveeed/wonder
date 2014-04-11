@@ -20,6 +20,7 @@ public class ProcessStreamLogger extends Thread {
     public ProcessStreamLogger(MInstance instance, Logger logger, Process process) {
         super();
         setName(instance.displayName());
+        setDaemon(true);  // Don't keep JVM running for this
         this.logger = logger;
         reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         this.instance = instance;
@@ -34,9 +35,7 @@ public class ProcessStreamLogger extends Thread {
                 }
                 try {
                     Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    // Don't care
-                }
+                } catch (InterruptedException e) { }
             }
             reader.close();
             logger.debug("Instance output now going to " + MObject.validatedOutputPath(instance.outputPath()));
