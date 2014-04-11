@@ -38,7 +38,7 @@ public class MHost extends MObject {
     
     private static final Logger log = Logger.getLogger(MHost.class);
     
-    private final int _receiveTimeout = ERXProperties.intForKeyWithDefault("JavaMonitor.receiveTimeout", 10000);
+    private final int _receiveTimeout = ERXProperties.intForKeyWithDefault("JavaMonitor.receiveTimeout", 10) * 1000;
 
     /*
      * NSString name; NSString type; // WINDOWS | UNIX | MACOSX

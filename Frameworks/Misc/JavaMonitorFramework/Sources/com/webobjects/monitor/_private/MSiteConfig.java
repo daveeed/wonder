@@ -1133,7 +1133,7 @@ public class MSiteConfig extends MObject {
 
     public long instanceMonitorInterval() {
         // Expose this in JavaMonitor?
-        return ERXProperties.longForKeyWithDefault("WOTaskd.instanceMonitorCheckInterval", 60 * 1000);
+        return ERXProperties.longForKeyWithDefault("WOTaskd.instanceMonitorCheckInterval", 60) * 1000;
     }
     
     public MApplication applicationWithName(String anAppName) {
