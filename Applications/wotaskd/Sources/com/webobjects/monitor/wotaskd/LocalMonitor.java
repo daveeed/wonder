@@ -59,9 +59,9 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     boolean _shouldUseSpawn = true;
     String spawningGrounds = null;
     Application theApplication = (Application )WOApplication.application();
-    final int _forceQuitDelay = ERXProperties.intForKeyWithDefault("WOTaskd.killTimeout", 120000);
-    final int _receiveTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.receiveTimeout", 5000);
-    final int _sendTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.sendTimeout", 5000);
+    final int _forceQuitDelay = ERXProperties.intForKeyWithDefault("WOTaskd.forceQuitDelay", 120) * 1000;
+    final int _receiveTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.receiveTimeout", 5) * 1000;
+    final int _sendTimeout = ERXProperties.intForKeyWithDefault("WOTaskd.sendTimeout", 2) * 1000;
     final boolean _forceQuitTaskEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.forceQuitTaskEnabled", false);
     final boolean _instanceMonitorEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.instanceMonitorEnabled", false);
     final boolean _logAppStartupEnabled = ERXProperties.booleanForKeyWithDefault("WOTaskd.logAppStartupEnabled", false);
@@ -446,44 +446,88 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     @Override
     public String startInstance(MInstance anInstance) {
         MSiteConfig aConfig = theApplication.siteConfig();
-        if (anInstance == null)
+        if (anInstance == null) {
+            logger.error("Attempt to start null instance on " + _hostName);
             return "Attempt to start null instance on " + _hostName;
-        if (anInstance.host() != aConfig.localHost())
+        }
+        
+        if (anInstance.host() != aConfig.localHost()) {
+            logger.error(anInstance.displayName() + " does not exist on " + _hostName + "; START instance failed");
             return anInstance.displayName() + " does not exist on " + _hostName + "; START instance failed";
-        if (anInstance.isRunning_W())
-            //            return _hostName + ": " + anInstance.displayName() + " is already running";
+            
+        }
+        
+        if (anInstance.isRunning_W()) {
+            logger.warn(_hostName + ": " + anInstance.displayName() + " is already running");
             return null;
-        if (anInstance.state == MObject.STARTING)
-            //            return _hostName + ": " + anInstance.displayName() + " is currently starting";
+        }
+        
+        if (anInstance.state == MObject.STARTING) {
+            logger.warn(_hostName + ": " + anInstance.displayName() + " is currently starting");
             return null;
-        if (_testConnection(anInstance))
+        }
+        
+        if (_testConnection(anInstance)) {
+            logger.error(_hostName + ": "+ anInstance.displayName() + " cannot be started because port " + anInstance.port() + " is still in use");
             return _hostName + ": "+ anInstance.displayName() + " cannot be started because port " + anInstance.port() + " is still in use";
+        }
 
-        String aFullPath = anInstance.path();
+        String pathToExecutable = anInstance.path();
 
-        if ( aFullPath == null ) return _hostName + ": Path for " + anInstance.displayName() + " does not exist";
+        if ( pathToExecutable == null ) {
+            logger.error("Can't start instance: " + _hostName + ": Path for " + anInstance.displayName() + " has not been configured");
+            return _hostName + ": Path for " + anInstance.displayName() + " does not exist";
+        }
 
-        aFullPath = anInstance.path().trim();
-        String arguments = anInstance.commandLineArguments();
-        String aLaunchPath = aFullPath + " " + arguments;
+        pathToExecutable = anInstance.path().trim();
+        File executableFile = new File(pathToExecutable);
 
-        anInstance.willAttemptToStart();
+        if ( !executableFile.exists() ) {
+            logger.error(_hostName + ": Path '" + pathToExecutable + "' for " + anInstance.displayName() + " does not exist");
+            return _hostName + ": Path '" + pathToExecutable + "' for " + anInstance.displayName() + " does not exist";
+        }
+        
+        if ( !executableFile.isFile() ) {
+            logger.error(_hostName + ": Path '" + pathToExecutable + "' for " + anInstance.displayName() + " is not a file");
+            return _hostName + ": Path '" + pathToExecutable + "' for " + anInstance.displayName() + " is not a file";
+        }
 
-        File aFile = new File(aFullPath);
-
-        if ( !aFile.exists() ) return _hostName + ": Path '" + aFullPath + "' for " + anInstance.displayName() + " does not exist";
-        if ( !aFile.isFile() ) return _hostName + ": Path '" + aFullPath + "' for " + anInstance.displayName() + " is not a file";
-
-        if (_shouldUseSpawn) {
-            if (_isOnWindows) {
-                aLaunchPath = spawningGrounds + aLaunchPath;
-            } else {
-                aLaunchPath = spawningGrounds + aLaunchPath;
+        if ( !executableFile.canExecute() ) {
+            logger.error(_hostName + ": Path '" + pathToExecutable + "' for " + anInstance.displayName() + " is not executable");
+            return _hostName + ": Path '" + pathToExecutable + "' for " + anInstance.displayName() + " is not executable";
+        }
+        
+        // If the log file path is not writable, the app can't finish starting so don't even try
+        if (anInstance.outputPath() != null && anInstance.outputPath().length() > 0) {
+            File outputPath = new File(anInstance.outputPath());
+            // First time running an instance is a special case - the file does not exist
+            if ( ! outputPath.exists()) {
+                try {
+                    if ( ! outputPath.createNewFile()) {
+                        logger.error("Can't start instance, can't write to output path: " + anInstance.outputPath());
+                        return "Can't start instance, can't write to output path: " + anInstance.outputPath();
+                    }
+                } catch (IOException e) {
+                    logger.error("Can't start instance, exception writing to output path: " + anInstance.outputPath(), e);
+                    return "Can't start instance, can't write to output path: " + anInstance.outputPath();
+                }   
+                outputPath.delete();
             }
+            else if ( ! outputPath.canWrite()) {
+                logger.error("Can't start instance, can't write to output path: " + anInstance.outputPath());
+                return "Can't start instance, can't write to output path: " + anInstance.outputPath();
+            }
+        }
+        
+        String arguments = anInstance.commandLineArguments();
+        String aLaunchPath = pathToExecutable + " " + arguments;
+        if (_shouldUseSpawn) {
+            aLaunchPath = spawningGrounds + aLaunchPath;
         }
 
         try {
             logger.debug("Starting Instance " + anInstance.displayName() + " with command: " + aLaunchPath);
+            anInstance.willAttemptToStart();
             Process p = Runtime.getRuntime().exec(aLaunchPath);
             if (_logAppStartupEnabled) {
                 new ProcessStreamLogger(anInstance, logger, p).start();
@@ -568,14 +612,14 @@ public class LocalMonitor extends ProtoLocalMonitor  {
     }
 
     protected WOResponse sendAdminRequest(MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
-        return sendToInstance(MObject.adminActionStringPostfix, anInstance, xmlDict);
+        return sendRequestToInstance(MObject.adminActionStringPostfix, anInstance, xmlDict);
     }
     
     protected WOResponse sendPingRequest(MInstance anInstance) throws MonitorException {
-        return sendToInstance(MObject.pingActionStringPostfix, anInstance, null);
+        return sendRequestToInstance(MObject.pingActionStringPostfix, anInstance, null);
     }
 
-    protected WOResponse sendToInstance(String action, MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
+    protected WOResponse sendRequestToInstance(String action, MInstance anInstance, NSDictionary xmlDict) throws MonitorException {
         NSData content = null;
         if (xmlDict != null) {
             String contentXML = (new _JavaMonitorCoder()).encodeRootObjectForKey(xmlDict, "instanceRequest");
@@ -592,7 +636,7 @@ public class LocalMonitor extends ProtoLocalMonitor  {
             WOHTTPConnection anHTTPConnection = new WOHTTPConnection(anInstance.host().name(), anInstance.port().intValue());
             anHTTPConnection.setReceiveTimeout(_receiveTimeout);
             anHTTPConnection.setSendTimeout(_sendTimeout);
-            logger.trace("Sending request to instance: " + action);
+            logger.trace("Sending request to instance " + anInstance.displayName() + ": " + aRequest.uri() + " " + aRequest.contentString());
             boolean requestSucceeded = anHTTPConnection.sendRequest(aRequest);
 
             if (requestSucceeded) {
