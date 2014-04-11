@@ -32,6 +32,7 @@ import com.webobjects.foundation.NSTimestamp;
 import com.webobjects.foundation.NSTimestampFormatter;
 
 import er.extensions.eof.ERXKey;
+import er.extensions.foundation.ERXProperties;
 
 public class MInstance extends MObject {
     static NSTimestampFormatter dateFormatter = new NSTimestampFormatter("%m/%d/%Y %H:%M:%S %Z");
@@ -625,14 +626,18 @@ public class MInstance extends MObject {
 
     /** ******** State Support ********* */
     private int _connectFailureCount = 0;
-
+    private NSTimestamp lastConnectionFailure = null;
+    private int allowedConnectionFailureCount = ERXProperties.intForKeyWithDefault("WOTaskd.allowedConnectionFailureCount", 3);
     public void failedToConnect() {
-        _connectFailureCount++;
-        if (_connectFailureCount > 2) {  // Make into property
-            state = MObject.STOPPING;
-            logger.error(displayName() + " failed to connect twice, telling to die");
-            setShouldDie(true);
-            _lastRegistration = NSTimestamp.DistantPast;
+        if (lastConnectionFailure != null && (new NSTimestamp().getTime() - lastConnectionFailure.getTime() > 30 * 1000)) {
+            lastConnectionFailure = new NSTimestamp();
+            _connectFailureCount++;
+            if (_connectFailureCount > allowedConnectionFailureCount) {
+                state = MObject.STOPPING;
+                logger.error(displayName() + " failed to connect too many times, telling to die");
+                setShouldDie(true);
+                _lastRegistration = NSTimestamp.DistantPast;
+            }
         }
     }
 
