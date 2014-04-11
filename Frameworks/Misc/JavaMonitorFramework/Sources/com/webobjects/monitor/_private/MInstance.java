@@ -627,7 +627,7 @@ public class MInstance extends MObject {
     /** ******** State Support ********* */
     private int _connectFailureCount = 0;
     private NSTimestamp lastConnectionFailure = null;
-    private int allowedConnectionFailureCount = ERXProperties.intForKeyWithDefault("WOTaskd.allowedConnectionFailureCount", 3);
+    private int allowedConnectionFailureCount = ERXProperties.intForKeyWithDefault("WOTaskd.allowedCommunicationFailureCount", 3);
     public void failedToConnect() {
         if (lastConnectionFailure != null && (new NSTimestamp().getTime() - lastConnectionFailure.getTime() > 30 * 1000)) {
             lastConnectionFailure = new NSTimestamp();
