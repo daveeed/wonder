@@ -122,6 +122,7 @@ public class LifebeatRequestHandler extends WORequestHandler {
         }
         if ("HTTP/1.0".equals(aRequest.httpVersion())) {
             aResponse = null;
+            log.error("Igoring HTTP/1.0 lifebeat from " + aRequest._originatingAddress() + ": " + aRequest.queryString());
         }
 
         return aResponse;
