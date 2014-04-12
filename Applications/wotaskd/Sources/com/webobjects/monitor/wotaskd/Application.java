@@ -273,8 +273,8 @@ public class Application extends ERXApplication  {
           }
         }
         
-        logger.info("wotaskd accepting lifebeats from theese hosts:" + WOHostUtilities.getLocalHosts());
-        logger.info("wotask is listening on " + host() + ":" + port());
+        logger.info("wotaskd accepting lifebeats from these hosts:" + WOHostUtilities.getLocalHosts());
+        logger.info("wotask is listening on " + hostAddress() + ":" + port());
     }
     
     public class SshPasswordAuthenticator implements PasswordAuthenticator {
