@@ -17,8 +17,6 @@ import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import org.apache.log4j.Logger;
-
 import com.webobjects.appserver.WOApplication;
 import com.webobjects.appserver.WOMailDelivery;
 import com.webobjects.foundation.NSArray;
@@ -32,7 +30,6 @@ import com.webobjects.foundation.NSTimestamp;
 import com.webobjects.foundation.NSTimestampFormatter;
 
 import er.extensions.eof.ERXKey;
-import er.extensions.foundation.ERXProperties;
 
 public class MInstance extends MObject {
     static NSTimestampFormatter dateFormatter = new NSTimestampFormatter("%m/%d/%Y %H:%M:%S %Z");
@@ -41,8 +38,7 @@ public class MInstance extends MObject {
 
     public static final ERXKey<MHost> HOST = new ERXKey<MHost>("host");
     public static final ERXKey<String> HOST_NAME = new ERXKey<String>("hostName");
-    private static final Logger logger = Logger.getLogger(MInstance.class);
-    
+
     /*
      * String hostName; Integer id; Integer port; String applicationName;
      * Boolean autoRecover; Integer minimumActiveSessionsCount; String path;
@@ -479,8 +475,8 @@ public class MInstance extends MObject {
     @Override
     public String toString() {
         if (false) {
-            return (values.toString() + " " + "lastRegistration = " + (_lastRegistration == NSTimestamp.DistantPast ? "(none)" : _lastRegistration.toString()) + 
-                    " " + "state = " + state + " " + "isRefusingNewSessions = " + isRefusingNewSessions() + " " + "deaths = " + _deaths);
+            return (values.toString() + " " + "lastRegistration = " + _lastRegistration + " " + "state = " + state
+                    + " " + "isRefusingNewSessions = " + isRefusingNewSessions() + " " + "deaths = " + _deaths);
         }
         return "MInstance@" + applicationName() + "-" + id();
     }
@@ -626,18 +622,12 @@ public class MInstance extends MObject {
 
     /** ******** State Support ********* */
     private int _connectFailureCount = 0;
-    private NSTimestamp lastConnectionFailure = null;
-    private int allowedConnectionFailureCount = ERXProperties.intForKeyWithDefault("WOTaskd.allowedCommunicationFailureCount", 3);
+
     public void failedToConnect() {
-        if (lastConnectionFailure != null && (new NSTimestamp().getTime() - lastConnectionFailure.getTime() > 30 * 1000)) {
-            lastConnectionFailure = new NSTimestamp();
-            _connectFailureCount++;
-            if (_connectFailureCount > allowedConnectionFailureCount) {
-                state = MObject.STOPPING;
-                logger.error(displayName() + " failed to connect too many times, telling to die");
-                setShouldDie(true);
-                _lastRegistration = NSTimestamp.DistantPast;
-            }
+        _connectFailureCount++;
+        if (_connectFailureCount > 2) {
+            state = MObject.DEAD;
+            _lastRegistration = NSTimestamp.DistantPast;
         }
     }
 
@@ -749,42 +739,39 @@ public class MInstance extends MObject {
     }
 
     public void updateRegistration(NSTimestamp registrationDate) {
+        succeededInConnection();
         _lastRegistration = registrationDate;
     }
 
     public void registerStop(NSTimestamp registrationDate) {
+        succeededInConnection();
         _lastRegistration = NSTimestamp.DistantPast;
         state = MObject.DEAD;
     }
 
     public void registerCrash(NSTimestamp registrationDate) {
+        succeededInConnection();
+        _lastRegistration = NSTimestamp.DistantPast;
         state = MObject.CRASHING;
     }
 
     public void sendDeathNotificationEmail() {
     	NSTimestamp currentTime = new NSTimestamp();
+        String currentDate = currentTime.toString();
 
+        long cutOffTime = _lastRegistration.getTime() + lifebeatCheckInterval();
         String assumedToBeDead = "";
-        if (_lastRegistration == NSTimestamp.DistantPast) {
-            assumedToBeDead = "The app did not send any lifebeats so it is assumed to be dead.\n";
+        if (currentTime.getTime() > cutOffTime) {
+        	long secondsDifference = (currentTime.getTime() - _lastRegistration.getTime()) / 1000;
+        	assumedToBeDead = "The app did not respond for " + secondsDifference + " seconds " +
+        			"which is greater than the allowed threshold of " + lifebeatCheckInterval() + " seconds " +
+        			"(Lifebeat Interval * WOAssumeApplicationIsDeadMultiplier) so it is assumed to be dead.\n";
         }
-        else {
-            long cutOffTime = _lastRegistration.getTime() + lifebeatCheckInterval();
-            if (currentTime.getTime() > cutOffTime) {
-                long secondsDifference = (currentTime.getTime() - _lastRegistration.getTime()) / 1000;
-                assumedToBeDead = "The app did not respond for " + secondsDifference + " seconds " +
-                        "which is greater than the allowed threshold of " + lifebeatCheckInterval()/1000 + " seconds " +
-                        "(Lifebeat Interval * WOAssumeApplicationIsDeadMultiplier) so it is assumed to be dead.\n";
-            }   
-        }
-
-        NSTimestampFormatter timestampFormatter = new NSTimestampFormatter();
     	String message = "Application '" + displayName() + "' on " + _host.name() + ":" + port() +
-	        " stopped running at " + timestampFormatter.format(currentTime) + ".\n" + 
+	        " stopped running at " + (currentDate) + ".\n" + 
 	        "The app's current state was: " + stateArray[state] + ".\n" +
 	        assumedToBeDead + 
-	        "The last successful communication occurred at: " + 
-	        (_lastRegistration == NSTimestamp.DistantPast ? "(none)" : timestampFormatter.format(_lastRegistration)) + ". " + 
+	        "The last successful communication occurred at: " + _lastRegistration.toString() + ". " + 
 	        "This may be the result of a crash or an intentional shutdown from outside of wotaskd";
         
     	NSLog.err.appendln(message);
